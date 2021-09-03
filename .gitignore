@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+node_modules
+dist
+.eslintcache
+output
+node-10.15.0
+*.code-workspace
+log
+.gitattributes
+.vscode
+server/config/
+server/test/
