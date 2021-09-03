@@ -32,7 +32,7 @@ exports.getPenalty = async (openid) => {
 };
 
 // 保存提醒时间
-exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money, multiple, max_days) => {
+exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money, multiple, max_days, continue_days) => {
     try {
         return await UserInfoModel.findOneAndUpdate({openid}, {
             openid,
@@ -42,6 +42,7 @@ exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money
             min_money,
             multiple,
             max_days,
+            continue_days,
         }, {
             new: true,
             upsert: true,

@@ -49,7 +49,8 @@ const saveTime = async (ctx) => {
 		const min_money = 20;
 		const multiple = 1.5;
 		const max_days = 3;
-		await userService.saveTime(openid, remind_time, cur_money, total_money, min_money, multiple, max_days);
+		const continue_days = 0;
+		await userService.saveTime(openid, remind_time, cur_money, total_money, min_money, multiple, max_days, continue_days);
 		status.success(ctx);
 	} catch (e) {
 		console.error('saveTime.error====', e);
