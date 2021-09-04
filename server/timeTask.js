@@ -80,42 +80,56 @@ const scanAndSend = () => {
 
 exports.scanAndSend = scanAndSend;
 
+// 日期转换成字符串：2021-08-31
+const date2String = date => {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1 < 10 ? `0${date.getMonth() + 1}` : date.getMonth() + 1;
+    const day = date.getDate() + 1 < 10 ? `0${date.getDate()}` : date.getDate();
+    const result = year + '-' + month + '-' + day;
+    return result;
+};
+
 // 获取昨天日期
 const getYesterday = () => {
     const d = new Date();
     d.setTime(d.getTime() - 24 * 60 * 60 * 1000);
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1 < 10 ? `0${d.getMonth() + 1}` : d.getMonth() + 1;
-    const day = d.getDate() + 1 < 10 ? `0${d.getDate()}` : d.getDate();
-    const yesterday = year + '-' + month + '-' + day;
-    console.log('yesterday is: ', yesterday);
-    return yesterday;
+    return date2String(d);
 };
+// console.log('getYesterday:::', getYesterday());
+
+// 获取今天日期
+const getToday = () => {
+    const d = new Date();
+    return date2String(d);
+};
+// console.log('getToday:::', getToday());
+
 
 // 定时任务2：定点更新，针对每个当天没有点击『确定』或『取消』的用户
 const scanAndUpdate = () => {
-    // 每天凌晨1点触发
-    schedule.scheduleJob('0 0 1 * * *', async () => {
-    // schedule.scheduleJob('15 16 23 * * *', async () => {
-        // 获取昨天日期
+    // 每天中午12点0分30秒触发
+    schedule.scheduleJob('30 0 12 * * *', async () => {
+    // schedule.scheduleJob('5/5 * * * * *', async () => {
+        // 获取昨天日期、今天日期
         const yesterday = getYesterday();
-        // const yesterday = '2021-08-29';
-        // 数据匹配
-        const userInfoList = await UserInfoModel.find({last_confirm_date: yesterday});
-        // console.log('userInfo=========', userInfo);
+        const today = getToday();
+        // 数据匹配(不是昨天、也不是今天)
+        // 遗留bug：比如2021-09-02确认过，2021-09-03没确认过，但是在2021-09-04（今天、该定时任务触发前点了确认），则对于2021-09-03没点确认无法判断
+        const userInfoList = await UserInfoModel.find({'$and': [{last_confirm_date: {'$ne': yesterday}}, {last_confirm_date: {'$ne': today}}]});
+        // console.log('userInfoList=========', userInfoList);
         if (userInfoList.length > 0) {
             userInfoList.forEach(async (userInfo) => {
                 // 计算惩罚金额
                 let updateContent = {};
                 let { openid, cur_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action } = userInfo;
                 // 还在当前惩罚天数范围内
-                if (continue_days < max_days) {
+                if (continue_days < max_days - 1) {
                     updateContent = { continue_days: continue_days + 1 };
                 }
                 // 到达当前惩罚天数上限，需要翻倍
                 else {
                     updateContent = {
-                        continue_days: 1,
+                        continue_days: 0,
                         cur_money: cur_money * multiple,
                     };
                 }
@@ -128,5 +142,7 @@ const scanAndUpdate = () => {
         }
     });
 };
+
+// scanAndUpdate();
 
 exports.scanAndUpdate = scanAndUpdate;

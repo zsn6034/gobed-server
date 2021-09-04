@@ -16,7 +16,7 @@ function hello (ctx) {
 	ctx.ok({ user })
 }
 
-// 获取今日惩罚金额、今天是否确认、总惩罚金额
+// 获取今日惩罚金额、今天是否确认、总惩罚金额、提醒时间
 const getPenalty = async (ctx) => {
 	const query = ctx.request.query;
 	console.log('getPenalty:::query', query);
@@ -25,15 +25,15 @@ const getPenalty = async (ctx) => {
 		// 使用_3rd_session获取openid
 		const arr = await loginService.getData(_3rd_session);
 		const openid = arr[0]['openid'];
-		const { cur_money, has_confirm, total_money} = await userService.getPenalty(openid);
-		status.success(ctx, { cur_money, has_confirm, total_money });
+		const { cur_money, has_confirm, total_money, remind_time } = await userService.getPenalty(openid);
+		status.success(ctx, { cur_money, has_confirm, total_money, remind_time });
 	} catch (e) {
 		console.error('saveTime.error====', e);
 		status.warning(ctx, '获取今日惩罚金额失败！');
 	}
 };
 
-// 保存用户设置的提醒时间
+// 保存用户设置的提醒时间（相当于重置）
 const saveTime = async (ctx) => {
 	const body = ctx.request.body;
 	const { remind_time, _3rd_session } = body;
@@ -50,7 +50,10 @@ const saveTime = async (ctx) => {
 		const multiple = 1.5;
 		const max_days = 3;
 		const continue_days = 0;
-		await userService.saveTime(openid, remind_time, cur_money, total_money, min_money, multiple, max_days, continue_days);
+		const last_confirm_date = null;
+		const last_confirm_action = 0;
+		const first_confirm_continue_days = 0;
+		await userService.saveTime({ openid, remind_time, cur_money, total_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action, first_confirm_continue_days });
 		status.success(ctx);
 	} catch (e) {
 		console.error('saveTime.error====', e);

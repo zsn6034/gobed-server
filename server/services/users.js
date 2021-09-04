@@ -15,7 +15,7 @@ const getTodayDate = () => {
     return `${year}-${month}-${date}`;
 };
 
-// 获取今日惩罚金额、今天是否确认、总惩罚金额
+// 获取今日惩罚金额、今天是否确认、总惩罚金额、提醒时间
 exports.getPenalty = async (openid) => {
     try {
         const userInfo = await UserInfoModel.findOne({openid});
@@ -24,6 +24,7 @@ exports.getPenalty = async (openid) => {
             cur_money: userInfo.cur_money || 0,
             has_confirm: userInfo.last_confirm_date === getTodayDate(),
             total_money: userInfo.total_money,
+            remind_time: userInfo.remind_time,
         };
     } catch (e) {
         console.error(e);
@@ -31,8 +32,20 @@ exports.getPenalty = async (openid) => {
     }
 };
 
-// 保存提醒时间
-exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money, multiple, max_days, continue_days) => {
+// 保存提醒时间（相当于重置）
+exports.saveTime = async ({
+    openid,
+    remind_time,
+    cur_money,
+    total_money,
+    min_money,
+    multiple,
+    max_days,
+    continue_days,
+    last_confirm_date,
+    last_confirm_action,
+    first_confirm_continue_days
+    }) => {
     try {
         return await UserInfoModel.findOneAndUpdate({openid}, {
             openid,
@@ -43,6 +56,9 @@ exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money
             multiple,
             max_days,
             continue_days,
+            last_confirm_date,
+            last_confirm_action,
+            first_confirm_continue_days,
         }, {
             new: true,
             upsert: true,
@@ -54,6 +70,7 @@ exports.saveTime = async (openid, remind_time, cur_money, total_money, min_money
 };
 
 // 确认or取消
+// 当max_days = 3时，continue_days允许取值范围：0、1、2
 exports.confirmOrCancel = async (openid, action) => {
     // 数据匹配
     const userInfo = await UserInfoModel.findOne({openid});
@@ -61,7 +78,7 @@ exports.confirmOrCancel = async (openid, action) => {
         console.log('不存在匹配用户：确认or取消失败...');
         return;
     }
-    let { cur_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action, first_confirm_continue_days } = userInfo;
+    let { cur_money, total_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action, first_confirm_continue_days } = userInfo;
     let updateContent = {};
     const date = getTodayDate();
     // 说明是当天第一次触发操作的action
@@ -69,9 +86,10 @@ exports.confirmOrCancel = async (openid, action) => {
         // 需要惩罚
         if (action === ACTION_TYPE.CANCEL) {
             // 还在当前惩罚天数范围内
-            if (continue_days < max_days) {
+            if (continue_days < max_days - 1) {
                 updateContent = {
                     continue_days: continue_days + 1,
+                    total_money: total_money + cur_money,
                     first_confirm_continue_days: continue_days,
                 };
             }
@@ -80,6 +98,7 @@ exports.confirmOrCancel = async (openid, action) => {
                 updateContent = {
                     continue_days: 0,
                     cur_money: cur_money * multiple,
+                    total_money: total_money + cur_money,
                     first_confirm_continue_days: continue_days,
                 };
             }
@@ -94,10 +113,10 @@ exports.confirmOrCancel = async (openid, action) => {
                 };
             }
             // 到达当前惩罚天数下限，需要减倍（惩罚金额不得小于最小值）
-            else if (cur_money > min_money) {
+            else if (continue_days === 0 && cur_money > min_money) {
                 updateContent = {
                     cur_money: Math.max(min_money, cur_money / multiple),
-                    continue_days: Math.max(max_days, 1),
+                    continue_days: Math.max(max_days - 1, 0),
                     first_confirm_continue_days: continue_days,
                 };
             }
@@ -116,43 +135,68 @@ exports.confirmOrCancel = async (openid, action) => {
         if (action === ACTION_TYPE.CANCEL) {
             // 说明在初始惩罚阶段（金额未翻倍），且当天第一次操作前conitune_days就为0，本次conitune_day只需要+1
             if (cur_money === min_money && first_confirm_continue_days === 0) {
-                updateContent = { continue_days: continue_days + 1 };
-            }
-            // 还在当前惩罚天数-1范围内
-            else if (continue_days < max_days - 1) {
-                updateContent = { continue_days: continue_days + 2 };
-            }
-            // 到达当前惩罚天数上限，需要翻倍
-            else {
                 updateContent = {
-                    continue_days: (continue_days + 1) % max_days,
-                    cur_money: cur_money * multiple,
+                    continue_days: first_confirm_continue_days + 1,
+                    total_money: total_money + cur_money,
                 };
             }
+            // 还在当前惩罚天数范围内
+            else if (continue_days < max_days - 2) {
+                updateContent = {
+                    continue_days: continue_days + 2,
+                    total_money: total_money + cur_money,
+                };
+            }
+            // 到达当前惩罚天数上限，需要翻倍，如：max_days = 3, continue_days = 1
+            else if (continue_days === max_days - 2) {
+                updateContent = {
+                    continue_days: 0,
+                    cur_money: cur_money * multiple,
+                    total_money: total_money + cur_money,
+                };
+            }
+            // 到达当前惩罚天数上限，需要翻倍，如：max_days = 3, continue_days = 2
+            else if (continue_days === max_days - 1) {
+                updateContent = {
+                    continue_days: 1,
+                    cur_money: cur_money * multiple,
+                    total_money: total_money + cur_money * multiple,
+                };
+            } else return;
         }
         // 需要修改为无需惩罚
         else {
+            // 说明在初始惩罚阶段（金额未翻倍）
             if (cur_money === min_money) {
-                if (continue_days >= 2) {
-                    updateContent = { continue_days: continue_days - 2 };
+                if (continue_days > 1) {
+                    updateContent = {
+                        continue_days: continue_days - 2,
+                        total_money: Math.max(total_money - cur_money, 0),
+                    };
                 }
-                else {
-                    updateContent = { continue_days: 0 };
-                }
+                else if (continue_days === 1) {
+                    updateContent = {
+                        continue_days: 0,
+                        total_money: Math.max(total_money - cur_money, 0),
+                    };
+                } else return;
             } else {
                 if (continue_days === 0) {
                     updateContent = {
-                        continue_days: Math.max(max_days -1, 0),
+                        continue_days: Math.max(max_days - 2, 0),
                         cur_money: Math.max(cur_money / multiple, min_money),
+                        total_money: Math.max(total_money - Math.max(cur_money / multiple, min_money), 0),
                     };
                 } else if (continue_days === 1) {
                     updateContent = {
-                        continue_days: max_days,
+                        continue_days: Math.max(max_days - 1, 0),
                         cur_money: Math.max(cur_money / multiple, min_money),
+                        total_money: Math.max(total_money - cur_money, 0),
                     };
                 } else if (continue_days > 1) {
                     updateContent = {
                         continue_days: continue_days - 2,
+                        total_money: Math.max(total_money - cur_money, 0),
                     };
                 } else return;
             }
