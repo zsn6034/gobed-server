@@ -2,6 +2,7 @@ require('dotenv').config();
 const server = require('./server')
 const https = require('https');
 const fs = require('fs');
+const config = require('./server/common/config');
 const timeTask = require('./server/timeTask');
 
 // 执行定时任务1：发送订阅消息
@@ -11,8 +12,8 @@ timeTask.scanAndSend();
 timeTask.scanAndUpdate();
 
 // const port = process.env.PORT || 80
-const HTTP_PORT = 9999;
-const HTTPS_PORT = 9998;
+const HTTP_PORT = config.httpPort || 9999;
+const HTTPS_PORT = config.httpsPort || 9998;
 // server.listen(port, () => console.log(`API server started on ${port}`));
 var options = {
     key: fs.readFileSync('./server/config/2_guxiaobai.top.key'),  //私钥文件路径

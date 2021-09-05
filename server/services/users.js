@@ -1,19 +1,13 @@
+const { date2String, getToday } = require('../utils/date');
 const UserInfoModel = require('../db/schema/UserInfoModel');
+const RecordModel = require('../db/schema/RecordModel');
 
 const ACTION_TYPE = {
-	CONFIRM: 0,
-	CANCEL: 1,
+    NO_ACTION: 0, // 无操作
+	CONFIRM: -1, // 确认，不需要惩罚
+	CANCEL: 1, // 取消，需要惩罚
 };
 exports.ACTION_TYPE = ACTION_TYPE;
-
-// 获取今日日期，如："2021-08-29"
-const getTodayDate = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = (d.getMonth() + 1) < 10 ? `0${d.getMonth() + 1}` : d.getMonth() + 1;
-    const date = d.getDate()  < 10 ? `0${d.getDate()}` : d.getDate();
-    return `${year}-${month}-${date}`;
-};
 
 // 获取今日惩罚金额、今天是否确认、总惩罚金额、提醒时间
 exports.getPenalty = async (openid) => {
@@ -22,13 +16,29 @@ exports.getPenalty = async (openid) => {
         // console.log('getTodayMoney:userInfo===', userInfo)
         return {
             cur_money: userInfo.cur_money || 0,
-            has_confirm: userInfo.last_confirm_date === getTodayDate(),
+            has_confirm: userInfo.last_confirm_date === getToday(),
             total_money: userInfo.total_money,
             remind_time: userInfo.remind_time,
         };
     } catch (e) {
         console.error(e);
         throw new Error('获取今日惩罚金额、今天是否确认、总惩罚金额失败！');
+    }
+};
+
+// 获取record列表(最近几天)
+exports.getRecordList = async (openid, count) => {
+    const dates = [];
+    for (let i = 0; i < count; i += 1) {
+        const d = new Date();
+        d.setTime(d.getTime() - i * 24 * 60 * 60 * 1000);
+        dates.push(date2String(d));
+    }
+    try {
+        return await RecordModel.find({openid, date: {'$in': dates}}).sort({date: 1});
+    } catch (e) {
+        console.error(e);
+        throw new Error(`获取record列表(最近${count}天)失败！`);
     }
 };
 
@@ -71,18 +81,18 @@ exports.saveTime = async ({
 
 // 确认or取消
 // 当max_days = 3时，continue_days允许取值范围：0、1、2
-exports.confirmOrCancel = async (openid, action) => {
+exports.confirmOrCancel = async (openid, action, date) => {
     // 数据匹配
     const userInfo = await UserInfoModel.findOne({openid});
     if (!userInfo) {
         console.log('不存在匹配用户：确认or取消失败...');
         return;
     }
-    let { cur_money, total_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action, first_confirm_continue_days } = userInfo;
+    const { cur_money, total_money, min_money, multiple, max_days, continue_days, last_confirm_date, last_confirm_action, first_confirm_continue_days } = userInfo;
     let updateContent = {};
-    const date = getTodayDate();
+    const today = getToday();
     // 说明是当天第一次触发操作的action
-    if (last_confirm_date !== date) {
+    if (last_confirm_date !== today) {
         // 需要惩罚
         if (action === ACTION_TYPE.CANCEL) {
             // 还在当前惩罚天数范围内
@@ -125,7 +135,7 @@ exports.confirmOrCancel = async (openid, action) => {
                 updateContent = { first_confirm_continue_days: continue_days };
             }
         }
-        updateContent = { ...updateContent, last_confirm_date: date, last_confirm_action: action };
+        updateContent = { ...updateContent, last_confirm_date: today, last_confirm_action: action };
     }
     // 说明是当天第N次(N>1)触发操作的action
     else {
@@ -201,9 +211,12 @@ exports.confirmOrCancel = async (openid, action) => {
                 } else return;
             }
         }
-        updateContent = { ...updateContent, last_confirm_date: date, last_confirm_action: action };
+        updateContent = { ...updateContent, last_confirm_date: today, last_confirm_action: action };
     }
     try {
+        // 1.更新record表
+        await RecordModel.findOneAndUpdate({ openid, date }, { last_confirm_action: action, last_confirm_date: today });
+        // 2.更新user_info表
         return await UserInfoModel.findOneAndUpdate({openid}, updateContent, {
             new: true,
             // upsert: true,

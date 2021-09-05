@@ -6,8 +6,9 @@ dist
 output
 node-10.15.0
 *.code-workspace
-log*
 .gitattributes
 .vscode
 server/config/
 server/test/
+node_cache/
+log*.txt

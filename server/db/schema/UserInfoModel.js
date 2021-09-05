@@ -12,7 +12,7 @@ const userInfoSchema = new Schema({
     max_days: Number, // 到达惩罚翻倍所需天数，如：3
     continue_days: Number, // 当前倍数连续天数（每天根据last_modify_action判断+1或-1，到达max_days时需要翻倍，到达0时需要减倍），如：2
     last_confirm_date: String, // 最近一次触发确认操作的日期，如：2021-08-29
-    last_confirm_action: Number, // 最近一次触发操作的action，如：1（1代表今日需要惩罚，且当前倍数对应continue_days需要加1；反之-1代表今日不需要惩罚，且continue_days减1）
+    last_confirm_action: Number, // 最近一次触发操作的action，如：1（1代表今日需要惩罚，且当前倍数对应continue_days需要加1；反之-1代表今日不需要惩罚，且continue_days减1；0代表无操作）
     first_confirm_continue_days: Number, // 当天第一次触发操作时对应的continue_days，如：0
 });
 

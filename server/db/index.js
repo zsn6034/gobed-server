@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const config = require('../config');
+const config = require('../common/config');
 
 let dbAddress = `mongodb://${config.mongo.host}:${config.mongo.port}/${config.mongo.db}`;
 if ('user' in config.mongo) {
