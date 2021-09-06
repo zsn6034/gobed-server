@@ -57,7 +57,11 @@ exports.saveTime = async ({
     first_confirm_continue_days
     }) => {
     try {
-        return await UserInfoModel.findOneAndUpdate({openid}, {
+        // 1.删除之前对应日期的record
+		const today = getToday();
+		await RecordModel.deleteOne({ openid, date: today });
+        // 2.创建or更新userInfo表
+        await UserInfoModel.findOneAndUpdate({openid}, {
             openid,
             remind_time,
             cur_money,
